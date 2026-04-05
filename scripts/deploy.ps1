@@ -109,15 +109,13 @@ if ($Uninstall) {
 
 # ── Banner ─────────────────────────────────────────────────────────
 
-Write-Host @"
-
-    +===============================================+
-    |     LitterBox Deployment (ADSIM-AI)           |
-    |     Malware Analysis Sandbox                  |
-    |     Using Windows Task Scheduler (native)     |
-    +===============================================+
-
-"@ -ForegroundColor Magenta
+Write-Host ""
+Write-Host "    +===============================================+" -ForegroundColor Magenta
+Write-Host "    :     LitterBox Deployment (ADSIM-AI)           :" -ForegroundColor Magenta
+Write-Host "    :     Malware Analysis Sandbox                  :" -ForegroundColor Magenta
+Write-Host "    :     Using Windows Task Scheduler (native)     :" -ForegroundColor Magenta
+Write-Host "    +===============================================+" -ForegroundColor Magenta
+Write-Host ""
 
 # ── Step 1: Validate Prerequisites ─────────────────────────────────
 
@@ -364,27 +362,25 @@ try {
 
 # ── Summary ────────────────────────────────────────────────────────
 
-Write-Host @"
-
-    +===============================================+
-    |     Deployment Complete                       |
-    +===============================================+
-
-    Task:       $TaskName
-    Status:     $($taskInfo.State)
-    Endpoint:   http://${BindIP}:${Port}
-    Health:     http://localhost:${Port}/health
-    Logs:       $logDir\litterbox.log
-
-    ADSIM-AI .env:
-      LITTERBOX_URL=http://$(hostname):$Port
-
-    Task management (PowerShell as Admin):
-      Start-ScheduledTask -TaskName "$TaskName"
-      Stop-ScheduledTask -TaskName "$TaskName"
-      Get-ScheduledTask -TaskName "$TaskName" | Select State
-
-    Uninstall:
-      .\deploy.ps1 -Uninstall
-
-"@ -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    +===============================================+" -ForegroundColor Cyan
+Write-Host "    :     Deployment Complete                       :" -ForegroundColor Cyan
+Write-Host "    +===============================================+" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    Task:       $TaskName" -ForegroundColor Cyan
+Write-Host "    Status:     $($taskInfo.State)" -ForegroundColor Cyan
+Write-Host "    Endpoint:   http://${BindIP}:${Port}" -ForegroundColor Cyan
+Write-Host "    Health:     http://localhost:${Port}/health" -ForegroundColor Cyan
+Write-Host "    Logs:       $logDir\litterbox.log" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    ADSIM-AI .env:" -ForegroundColor Cyan
+Write-Host "      LITTERBOX_URL=http://$(hostname):$Port" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    Task management (PowerShell as Admin):" -ForegroundColor Cyan
+Write-Host "      Start-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
+Write-Host "      Stop-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
+Write-Host "      Get-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "    Uninstall:" -ForegroundColor Cyan
+Write-Host "      .\deploy.ps1 -Uninstall" -ForegroundColor Cyan
+Write-Host ""
