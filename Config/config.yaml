@@ -1,7 +1,7 @@
 # config/config.yaml
 application:
   name: "LitterBox"
-  host: "127.0.0.1"
+  host: "0.0.0.0"
   port: 1337
   debug: false
   version: "4.1.0"
@@ -107,6 +107,8 @@ analysis:
       tool_path: ".\\Scanners\\RedEdr\\RedEdr.exe"
       command: "{tool_path} -e --trace {process_name}"
       timeout: 120
+
+
 
 
 

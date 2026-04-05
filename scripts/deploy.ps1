@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     LitterBox Deployment Script (ADSIM-AI Fork)
     Installs, configures, and registers LitterBox using native Windows
@@ -52,7 +52,7 @@ $ErrorActionPreference = "Stop"
 
 # Self-elevate if not running as Administrator
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $argList = @("-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+    $argList = @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
     foreach ($key in $PSBoundParameters.Keys) {
         $val = $PSBoundParameters[$key]
         if ($val -is [switch]) { if ($val) { $argList += "-$key" } }
@@ -140,11 +140,16 @@ if (-not $isAdmin) {
 }
 Write-OK "Running as Administrator"
 
-# Python
+# Python — prefer venv if present
 if (-not $PythonPath) {
-    $PythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-    if (-not $PythonPath) {
-        $PythonPath = (Get-Command python3 -ErrorAction SilentlyContinue).Source
+    $venvPython = Join-Path $InstallPath "venv\Scripts\python.exe"
+    if (Test-Path $venvPython) {
+        $PythonPath = $venvPython
+    } else {
+        $PythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+        if (-not $PythonPath) {
+            $PythonPath = (Get-Command python3 -ErrorAction SilentlyContinue).Source
+        }
     }
 }
 if (-not $PythonPath -or -not (Test-Path $PythonPath)) {
@@ -178,13 +183,17 @@ if (Test-Path $scannerPath) {
 
 Write-Step "Installing Python dependencies"
 Push-Location $InstallPath
-& $PythonPath -m pip install -r requirements.txt --quiet 2>&1 | Out-Null
-if ($LASTEXITCODE -eq 0) {
+$ErrorActionPreference = "Continue"
+$pipOut = & $PythonPath -m pip install -r requirements.txt --quiet --disable-pip-version-check 2>&1
+$pipExit = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+Pop-Location
+if ($pipExit -eq 0) {
     Write-OK "Dependencies installed"
 } else {
     Write-Warn "Some dependencies may have failed — check manually"
+    $pipOut | Where-Object { $_ } | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
 }
-Pop-Location
 
 # ── Step 4: Create Directories ─────────────────────────────────────
 
@@ -321,7 +330,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
     -RestartCount 999 `
-    -RestartInterval (New-TimeSpan -Seconds 10) `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit (New-TimeSpan -Days 365) `
     -Priority 4
 
