@@ -2,6 +2,7 @@
 
 import datetime
 import glob
+import hashlib
 import json
 import os
 import shutil
@@ -817,7 +818,7 @@ def register_routes(app):
             for filename in os.listdir(upload_folder):
                 full_path = os.path.join(upload_folder, filename)
                 if os.path.isfile(full_path):
-                    file_hash = analyzer._compute_md5(full_path)
+                    file_hash = hashlib.sha256(open(full_path, 'rb').read()).hexdigest()
                     if file_hash == payload_hash:
                         if hasattr(app, 'file_cache'):
                             app.file_cache.add_file(full_path, file_hash)

@@ -787,7 +787,7 @@ class Utils:
         # Prepare file paths
         original_filename = secure_filename(file.filename)
         extension = os.path.splitext(original_filename)[1].lower()
-        filename = f"{md5_hash}_{original_filename}"
+        filename = f"{sha256_hash}_{original_filename}"
         
         upload_folder = self.config['utils']['upload_folder']
         result_folder = self.config['utils']['result_folder']

@@ -159,7 +159,7 @@ class LitterBoxClient:
             
             # Cache the file info for faster lookups
             if 'file_info' in result:
-                file_hash = result['file_info'].get('md5')
+                file_hash = result['file_info'].get('sha256')
                 if file_hash:
                     self._file_cache[file_hash] = result['file_info']
                     
@@ -242,7 +242,7 @@ class LitterBoxClient:
         """Upload a kernel driver and optionally run HolyGrail analysis."""
         # Upload the driver
         upload_result = self.upload_file(file_path, file_name)
-        file_hash = upload_result['file_info']['md5']
+        file_hash = upload_result['file_info']['sha256']
         
         results = {
             'upload': upload_result,
@@ -709,8 +709,8 @@ def main():
             
             if args.command == 'upload':
                 result = client.upload_file(args.file, file_name=args.name)
-                file_hash = result['file_info']['md5']
-                print(f"File uploaded successfully. Hash: {file_hash}")
+                file_hash = result['file_info']['sha256']
+                print(f"File uploaded successfully. SHA256: {file_hash}")
                 
                 if args.analysis:
                     for analysis_type in args.analysis:
@@ -723,8 +723,8 @@ def main():
             elif args.command == 'upload-driver':
                 result = client.upload_and_analyze_driver(args.file, file_name=args.name, 
                                                         run_holygrail=args.holygrail)
-                file_hash = result['upload']['file_info']['md5']
-                print(f"Driver uploaded successfully. Hash: {file_hash}")
+                file_hash = result['upload']['file_info']['sha256']
+                print(f"Driver uploaded successfully. SHA256: {file_hash}")
                 
                 if args.holygrail and result['holygrail']:
                     if 'error' in result['holygrail']:
