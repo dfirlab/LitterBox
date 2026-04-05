@@ -362,25 +362,25 @@ try {
 
 # ── Summary ────────────────────────────────────────────────────────
 
-Write-Host ""
-Write-Host "    +===============================================+" -ForegroundColor Cyan
-Write-Host "    :     Deployment Complete                       :" -ForegroundColor Cyan
-Write-Host "    +===============================================+" -ForegroundColor Cyan
-Write-Host ""
+Write-Host ''
+Write-Host '    +===============================================+' -ForegroundColor Cyan
+Write-Host '    :     Deployment Complete                       :' -ForegroundColor Cyan
+Write-Host '    +===============================================+' -ForegroundColor Cyan
+Write-Host ''
 Write-Host "    Task:       $TaskName" -ForegroundColor Cyan
 Write-Host "    Status:     $($taskInfo.State)" -ForegroundColor Cyan
 Write-Host "    Endpoint:   http://${BindIP}:${Port}" -ForegroundColor Cyan
 Write-Host "    Health:     http://localhost:${Port}/health" -ForegroundColor Cyan
 Write-Host "    Logs:       $logDir\litterbox.log" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "    ADSIM-AI .env:" -ForegroundColor Cyan
+Write-Host ''
+Write-Host '    ADSIM-AI .env:' -ForegroundColor Cyan
 Write-Host "      LITTERBOX_URL=http://$(hostname):$Port" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "    Task management (PowerShell as Admin):" -ForegroundColor Cyan
-Write-Host "      Start-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
-Write-Host "      Stop-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
-Write-Host "      Get-ScheduledTask -TaskName `"$TaskName`"" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "    Uninstall:" -ForegroundColor Cyan
-Write-Host "      .\deploy.ps1 -Uninstall" -ForegroundColor Cyan
-Write-Host ""
+Write-Host ''
+Write-Host '    Task management (PowerShell as Admin):' -ForegroundColor Cyan
+Write-Host "      Start-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Cyan
+Write-Host "      Stop-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Cyan
+Write-Host "      Get-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Cyan
+Write-Host ''
+Write-Host '    Uninstall:' -ForegroundColor Cyan
+Write-Host '      .\deploy.ps1 -Uninstall' -ForegroundColor Cyan
+Write-Host ''
