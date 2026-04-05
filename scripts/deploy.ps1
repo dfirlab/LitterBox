@@ -1,4 +1,3 @@
-#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     LitterBox Deployment Script (ADSIM-AI Fork)
@@ -50,6 +49,18 @@ param(
 
 $TaskName = "LitterBox"
 $ErrorActionPreference = "Stop"
+
+# Self-elevate if not running as Administrator
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $argList = @("-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+    foreach ($key in $PSBoundParameters.Keys) {
+        $val = $PSBoundParameters[$key]
+        if ($val -is [switch]) { if ($val) { $argList += "-$key" } }
+        else { $argList += "-$key", "`"$val`"" }
+    }
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $argList
+    exit
+}
 
 # ── Helpers ────────────────────────────────────────────────────────
 
