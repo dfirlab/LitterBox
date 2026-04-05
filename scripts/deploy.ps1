@@ -2,22 +2,21 @@
 <#
 .SYNOPSIS
     LitterBox Deployment Script (ADSIM-AI Fork)
-    Installs, configures, and registers LitterBox as a Windows service.
+    Installs, configures, and registers LitterBox using native Windows
+    Task Scheduler — no third-party tools required.
 
 .DESCRIPTION
-    - Validates prerequisites (Python 3.11+, admin, NSSM)
+    - Validates prerequisites (Python 3.11+, admin)
     - Installs Python dependencies
     - Creates required directories (Uploads, Results, logs)
     - Configures firewall rule for port 1337
-    - Registers and starts LitterBox as a Windows service via NSSM
+    - Creates a Scheduled Task that runs at startup as SYSTEM
+      with auto-restart on failure
     - Migrates existing MD5-prefixed uploads to SHA256 (if any)
     - Verifies health endpoint
 
 .PARAMETER InstallPath
     Installation directory (default: C:\LitterBox)
-
-.PARAMETER NssmPath
-    Path to nssm.exe (default: C:\nssm\nssm.exe)
 
 .PARAMETER PythonPath
     Path to python.exe (auto-detected if not specified)
@@ -29,10 +28,10 @@
     Port to listen on (default: 1337)
 
 .PARAMETER SkipMigration
-    Skip the MD5→SHA256 hash migration step
+    Skip the MD5-to-SHA256 hash migration step
 
 .PARAMETER Uninstall
-    Remove the LitterBox service and firewall rule
+    Remove the LitterBox scheduled task and firewall rule
 
 .EXAMPLE
     .\deploy.ps1
@@ -42,7 +41,6 @@
 
 param(
     [string]$InstallPath = "C:\LitterBox",
-    [string]$NssmPath = "C:\nssm\nssm.exe",
     [string]$PythonPath = "",
     [string]$BindIP = "0.0.0.0",
     [int]$Port = 1337,
@@ -50,7 +48,7 @@ param(
     [switch]$Uninstall
 )
 
-$ServiceName = "LitterBox"
+$TaskName = "LitterBox"
 $ErrorActionPreference = "Stop"
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -75,23 +73,27 @@ function Write-Fail {
     Write-Host "    [-] $Message" -ForegroundColor Red
 }
 
-function Test-ServiceExists {
-    param([string]$Name)
-    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
-    return $null -ne $svc
-}
-
 # ── Uninstall ──────────────────────────────────────────────────────
 
 if ($Uninstall) {
-    Write-Step "Uninstalling LitterBox service"
+    Write-Step "Uninstalling LitterBox"
 
-    if (Test-ServiceExists $ServiceName) {
-        & $NssmPath stop $ServiceName 2>$null
-        & $NssmPath remove $ServiceName confirm
-        Write-OK "Service removed"
+    # Stop running process
+    $procs = Get-Process python* -ErrorAction SilentlyContinue | Where-Object {
+        $_.CommandLine -like "*litterbox*"
+    }
+    if ($procs) {
+        $procs | Stop-Process -Force
+        Write-OK "Stopped running LitterBox process"
+    }
+
+    # Remove scheduled task
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+        Write-OK "Scheduled task removed"
     } else {
-        Write-Warn "Service not found"
+        Write-Warn "Scheduled task not found"
     }
 
     # Remove firewall rule
@@ -109,10 +111,11 @@ if ($Uninstall) {
 
 Write-Host @"
 
-    ╔═══════════════════════════════════════════╗
-    ║     LitterBox Deployment (ADSIM-AI)       ║
-    ║     Malware Analysis Sandbox              ║
-    ╚═══════════════════════════════════════════╝
+    +===============================================+
+    |     LitterBox Deployment (ADSIM-AI)           |
+    |     Malware Analysis Sandbox                  |
+    |     Using Windows Task Scheduler (native)     |
+    +===============================================+
 
 "@ -ForegroundColor Magenta
 
@@ -141,30 +144,6 @@ if (-not $PythonPath -or -not (Test-Path $PythonPath)) {
 }
 $pyVersion = & $PythonPath --version 2>&1
 Write-OK "Python: $pyVersion ($PythonPath)"
-
-# NSSM
-if (-not (Test-Path $NssmPath)) {
-    Write-Warn "NSSM not found at $NssmPath"
-    Write-Host "    Downloading NSSM..." -ForegroundColor Yellow
-
-    $nssmDir = Split-Path $NssmPath
-    if (-not (Test-Path $nssmDir)) { New-Item -ItemType Directory -Path $nssmDir -Force | Out-Null }
-
-    $nssmZip = "$env:TEMP\nssm.zip"
-    Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-    Expand-Archive -Path $nssmZip -DestinationPath "$env:TEMP\nssm_extract" -Force
-    Copy-Item "$env:TEMP\nssm_extract\nssm-2.24\win64\nssm.exe" $NssmPath
-    Remove-Item $nssmZip -Force
-    Remove-Item "$env:TEMP\nssm_extract" -Recurse -Force
-
-    if (Test-Path $NssmPath) {
-        Write-OK "NSSM downloaded to $NssmPath"
-    } else {
-        Write-Fail "NSSM download failed. Download manually from https://nssm.cc/"
-        exit 1
-    }
-}
-Write-OK "NSSM: $NssmPath"
 
 # ── Step 2: Validate Installation ──────────────────────────────────
 
@@ -223,7 +202,6 @@ Write-Step "Updating configuration"
 $configPath = Join-Path $InstallPath "Config\config.yaml"
 if (Test-Path $configPath) {
     $config = Get-Content $configPath -Raw
-    # Update host to bind IP
     $config = $config -replace 'host: "127.0.0.1"', "host: `"$BindIP`""
     $config = $config -replace "port: \d+", "port: $Port"
     Set-Content $configPath $config
@@ -235,7 +213,7 @@ if (Test-Path $configPath) {
 # ── Step 6: Migrate Existing Uploads ───────────────────────────────
 
 if (-not $SkipMigration) {
-    Write-Step "Checking for MD5→SHA256 migration"
+    Write-Step "Checking for MD5-to-SHA256 migration"
 
     $migrationScript = Join-Path $InstallPath "scripts\migrate_hashes.py"
     $uploadsDir = Join-Path $InstallPath "Uploads"
@@ -272,91 +250,141 @@ New-NetFirewallRule -DisplayName "LitterBox" `
     -Description "LitterBox Malware Analysis Sandbox (ADSIM-AI)" | Out-Null
 Write-OK "Firewall rule: allow TCP $Port inbound"
 
-# ── Step 8: Register Windows Service ───────────────────────────────
+# ── Step 8: Create Wrapper Script ──────────────────────────────────
 
-Write-Step "Registering Windows service"
+Write-Step "Creating service wrapper"
 
-# Stop and remove existing service if present
-if (Test-ServiceExists $ServiceName) {
-    Write-Warn "Existing service found — stopping and removing"
-    & $NssmPath stop $ServiceName 2>$null
-    Start-Sleep -Seconds 2
-    & $NssmPath remove $ServiceName confirm 2>$null
-    Start-Sleep -Seconds 1
-}
-
-# Install service
-& $NssmPath install $ServiceName $PythonPath "$InstallPath\litterbox.py --ip $BindIP"
-& $NssmPath set $ServiceName AppDirectory $InstallPath
-& $NssmPath set $ServiceName DisplayName "LitterBox Malware Sandbox"
-& $NssmPath set $ServiceName Description "LitterBox malware analysis sandbox for ADSIM-AI red team operations"
-& $NssmPath set $ServiceName Start SERVICE_AUTO_START
-& $NssmPath set $ServiceName AppRestartDelay 5000
-& $NssmPath set $ServiceName AppStopMethodSkip 6
-& $NssmPath set $ServiceName AppStopMethodConsole 3000
-& $NssmPath set $ServiceName AppStopMethodWindow 3000
-
-# Configure logging
+# Create a wrapper batch file that Task Scheduler runs.
+# This handles logging stdout/stderr and keeps the process running.
+$wrapperPath = Join-Path $InstallPath "scripts\run-service.bat"
 $logDir = Join-Path $InstallPath "logs"
-& $NssmPath set $ServiceName AppStdout "$logDir\litterbox-stdout.log"
-& $NssmPath set $ServiceName AppStderr "$logDir\litterbox-stderr.log"
-& $NssmPath set $ServiceName AppRotateFiles 1
-& $NssmPath set $ServiceName AppRotateBytes 10485760  # 10MB
 
-Write-OK "Service registered: $ServiceName"
+$wrapperContent = @"
+@echo off
+REM LitterBox Service Wrapper — launched by Task Scheduler
+REM Logs to $logDir\litterbox.log
 
-# ── Step 9: Start Service ──────────────────────────────────────────
+cd /d "$InstallPath"
 
-Write-Step "Starting LitterBox service"
+:loop
+echo [%date% %time%] Starting LitterBox... >> "$logDir\litterbox.log"
+"$PythonPath" "$InstallPath\litterbox.py" --ip $BindIP >> "$logDir\litterbox.log" 2>&1
 
-& $NssmPath start $ServiceName
-Start-Sleep -Seconds 3
+echo [%date% %time%] LitterBox exited (code %errorlevel%). Restarting in 5 seconds... >> "$logDir\litterbox.log"
+timeout /t 5 /nobreak > nul
+goto loop
+"@
 
-$svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($svc -and $svc.Status -eq "Running") {
-    Write-OK "Service is RUNNING (PID: $($svc.ServiceHandle))"
-} else {
-    Write-Warn "Service may not have started — check logs at $logDir"
+Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding ASCII
+Write-OK "Wrapper: $wrapperPath (auto-restart loop)"
+
+# ── Step 9: Register Scheduled Task ────────────────────────────────
+
+Write-Step "Registering Scheduled Task"
+
+# Remove existing task if present
+$existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if ($existingTask) {
+    # Stop if running
+    if ($existingTask.State -eq "Running") {
+        Stop-ScheduledTask -TaskName $TaskName
+        Start-Sleep -Seconds 2
+    }
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+    Write-Warn "Removed existing task"
 }
 
-# ── Step 10: Health Check ──────────────────────────────────────────
+# Create the task
+$action = New-ScheduledTaskAction `
+    -Execute "cmd.exe" `
+    -Argument "/c `"$wrapperPath`"" `
+    -WorkingDirectory $InstallPath
+
+$trigger = New-ScheduledTaskTrigger -AtStartup
+
+$principal = New-ScheduledTaskPrincipal `
+    -UserId "SYSTEM" `
+    -LogonType ServiceAccount `
+    -RunLevel Highest
+
+$settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -RestartCount 999 `
+    -RestartInterval (New-TimeSpan -Seconds 10) `
+    -ExecutionTimeLimit (New-TimeSpan -Days 365) `
+    -Priority 4
+
+Register-ScheduledTask `
+    -TaskName $TaskName `
+    -Action $action `
+    -Trigger $trigger `
+    -Principal $principal `
+    -Settings $settings `
+    -Description "LitterBox Malware Analysis Sandbox (ADSIM-AI) — auto-restart on failure" | Out-Null
+
+Write-OK "Scheduled task registered: $TaskName"
+Write-OK "  Runs as: SYSTEM (highest privileges)"
+Write-OK "  Trigger: At startup + auto-restart on failure"
+Write-OK "  Restart: every 10 seconds, up to 999 retries"
+
+# ── Step 10: Start the Task ────────────────────────────────────────
+
+Write-Step "Starting LitterBox"
+
+Start-ScheduledTask -TaskName $TaskName
+Start-Sleep -Seconds 5
+
+$taskInfo = Get-ScheduledTask -TaskName $TaskName
+if ($taskInfo.State -eq "Running") {
+    Write-OK "Task is RUNNING"
+} else {
+    Write-Warn "Task state: $($taskInfo.State) — check logs"
+}
+
+# ── Step 11: Health Check ──────────────────────────────────────────
 
 Write-Step "Running health check"
 
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 try {
     $healthUrl = "http://localhost:$Port/health"
     $response = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 10
     Write-OK "Health check PASSED"
     Write-Host "    Status: $($response.status)" -ForegroundColor Green
-    Write-Host "    Version: $($response.version)" -ForegroundColor Green
+    if ($response.version) {
+        Write-Host "    Version: $($response.version)" -ForegroundColor Green
+    }
 } catch {
     Write-Warn "Health check failed — service may still be starting"
-    Write-Host "    Try: curl http://localhost:$Port/health" -ForegroundColor Yellow
-    Write-Host "    Logs: $logDir\litterbox-stderr.log" -ForegroundColor Yellow
+    Write-Host "    Try: curl http://localhost:${Port}/health" -ForegroundColor Yellow
+    Write-Host "    Logs: $logDir\litterbox.log" -ForegroundColor Yellow
 }
 
 # ── Summary ────────────────────────────────────────────────────────
 
 Write-Host @"
 
-    ╔═══════════════════════════════════════════╗
-    ║     Deployment Complete                   ║
-    ╚═══════════════════════════════════════════╝
+    +===============================================+
+    |     Deployment Complete                       |
+    +===============================================+
 
-    Service:    $ServiceName
-    Status:     $(if ($svc -and $svc.Status -eq 'Running') { 'RUNNING' } else { 'CHECK LOGS' })
+    Task:       $TaskName
+    Status:     $($taskInfo.State)
     Endpoint:   http://${BindIP}:${Port}
     Health:     http://localhost:${Port}/health
-    Logs:       $logDir\
+    Logs:       $logDir\litterbox.log
 
     ADSIM-AI .env:
-    LITTERBOX_URL=http://$(hostname):$Port
+      LITTERBOX_URL=http://$(hostname):$Port
 
-    Service management:
-    $NssmPath start $ServiceName
-    $NssmPath stop $ServiceName
-    $NssmPath restart $ServiceName
-    $NssmPath status $ServiceName
+    Task management (PowerShell as Admin):
+      Start-ScheduledTask -TaskName "$TaskName"
+      Stop-ScheduledTask -TaskName "$TaskName"
+      Get-ScheduledTask -TaskName "$TaskName" | Select State
+
+    Uninstall:
+      .\deploy.ps1 -Uninstall
 
 "@ -ForegroundColor Cyan
